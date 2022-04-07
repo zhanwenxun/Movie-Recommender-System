@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Movie Recommender System</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+    <style>
+        body {
+            margin: 0;
+        }
+
+        .button {
+            width: 100px;
+            height: 45px;
+        }
+
+        .metric {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+
+<div id="app" style="font-family: Arial,'Times New Roman','Microsoft YaHei',SimHei;">
+    <!-- Navigation menu -->
+    <el-menu mode="horizontal" default-active="1" background-color="#545c64" text-color="#fff"
+        active-text-color="#ffd04b" @select="handleSelect">
+        <!-- Collaborative Filtering Recommendation -->
+        <el-menu-item index="1" @click="index1"><b>CFR</b></el-menu-item>
+        <!-- Content-based Recommendation -->
+        <el-menu-item index="2" @click="cbr"><b>CBR</b></el-menu-item>
+        <!-- Explaination and Feedback -->
+        <el-menu-item index="3" @click="index3"><b>Feedback</b></el-menu-item>
+    </el-menu>
+
+    <el-container>
+        <el-main v-loading="loading" element-loading-text="Recommending... About three minutes">
+
+            <!-- Dialog0: Select Your Like Genres -->
+            <el-dialog title="Please choose any genre you're interested in." :visible="dialog0" width="60%"
+                :show-close="false">
+                <label>First input your user_id: </label>
+                <el-input v-model="user_id" maxlength="5"></el-input>
+                <br><br>
+
+                <span>Multiple answers are possible.</span>
+                <el-checkbox-group v-model="selected_genre" style="margin-top:20px">
+                    <el-checkbox :label=item border v-for="(item, index) in genre" :key="index"
+                        style="margin-top:20px; margin-left: 0px"></el-checkbox>
+                </el-checkbox-group>
+                <span slot="footer" class="dialog-footer">
+                    <el-button type="danger" @click="step1" plain :disabled="step1_show" style="min-width:128px">Next
+                    </el-button>
+                </span>
+            </el-dialog>
+
+            <!-- Dialog1: Rate These 18 Movies -->
+            <el-dialog title="Please rate 'all' the following movies." :visible="dialog1" width="80%" :show-close="false">
+                <el-row :gutter="20">
+                    <el-col :span="4" v-for="o in movies" :key="o.movie_id" :offset="0">
+                        <el-card :body-style="{ padding: '0px' }" style="margin-top:15px;height:368px;overflow:auto">
+                            <el-image style="width: 100%;height:240px;" :src="o.poster_url" fit="cover"></el-image>
+                            <h4 style="padding:0 10px;margin:0">{{o.movie_title}}</h4>
+                            <!-- Rating Movies Score -->
+                            <el-rate v-model="o.score" style="padding:10px 10px;" :colors="colors"></el-rate>
+                        </el-card>
+                    </el-col>
+                </el-row>
+                <span slot="footer" class="dialog-footer">
+                    <el-button type="danger" @click="cfr" plain :disabled="step2_show" style="min-width:128px">Next
+                    </el-button>
+                </span>
+            </el-dialog>
+
+            <!-- Index1: Collaborative Filtering Recommendation -->
+            <div v-show="activeIndex1">
+                <el-row :gutter="30" style="text-align: center;">
+                    <label><b>
+                            Please rate all movies before you click 'Refresh' Button
+                        </b></label><br>
+                    <el-col :span="4" style="margin-left: 430px;">
+                        <el-button class="button" type="primary round" @click="cfr2">Refresh</button>
+                    </el-col>
+                    <el-col :span="4">
+                        <el-button class="button" type="success round" @click="evaluate_cfr">Evaluate</button>
+                    </el-col>
+                </el-row>
+            </div>
+
+            <div v-show="activeIndex1">
+                <el-tag style="float: right; margin-right: 40px; text-align: center;" type="info" size="medium"
+                    hit="true">
+                    <b>CFR Evaluation Metric</b><br>
+                    <label v-model="RMSE" class="metric">RMSE: {{RMSE}}</label>
+                    <label v-model="MSE" class="metric">MSE: {{MSE}}</label>
+                    <label v-model="MAE" class="metric">MAE: {{MAE}}</label>
+                </el-tag>
+            </div>
+
+            <div v-show="activeIndex1">
+                <h2>KNN With Means</h2>
+                <el-row :gutter="20">
+                    <el-col :span="4" v-for="o in CFR" :key="o.movie_id" :offset="0">
+                        <el-card :body-style="{ padding: '0px' }"
+                            style="margin-top:15px;height:400px;overflow:auto;position:relative">
+                            <el-image style="width: 100%;height:240px;" :src="o.poster_url" fit="cover"></el-image>
+                            <h4 style="padding:0 10px;margin:0">{{o.movie_title}}</h4>
+                            <el-rate v-model="o.score" :texts="['so bad', 'disappointed', 'normal', 'good', 'great']"
+                                style="padding:10px 10px;" :colors="colors" show-text></el-rate>
+                            <el-button type="danger" icon="el-icon-s-flag" @click="similar_liked(o)"
+                                style="position:absolute;bottom:10px;right:10px">Like</el-button>
+                        </el-card>
+                    </el-col>
+                </el-row>
+            </div>
+
+            <!-- Index2: Content-Based Recommendation -->
+            <div v-show="activeIndex2">
+                <el-row :gutter="30" style="text-align: center;">
+                    <label style="text-align: center"><b>
+                            Please rate all movies before you click 'Refresh' Button
+                        </b></label><br>
+                    <el-col :span="4" style="margin-left: 430px;">
+                        <el-button class="button" type="primary round" @click="cbr2">Refresh</button>
+                    </el-col>
+                    <el-col :span="4">
+                        <el-button class="button" type="success round" @click="evaluate_cbr">Evaluate</button>
+                    </el-col>
+                </el-row>
+            </div>
+
+            <div v-show="activeIndex2">
+                <el-tag style="float: right; margin-right: 40px; text-align: center;" type="info" size="medium"
+                    hit="true">
+                    <b>CBR Evaluation Metric</b><br>
+                    <label v-model="Precision" class="metric">Precision: {{Precision}}</label>
+                    <label v-model="Recall" class="metric">Recall: {{Recall}}</label>
+                    <label v-model="nDCG" class="metric">nDCG: {{nDCG}}</label>
+                </el-tag>
+            </div>
+
+            <div v-show="activeIndex2">
+                <h2>Based Movies' genres</h2>
+                <el-row :gutter="20">
+                    <el-col :span="4" v-for="o in CBR" :key="o.movie_id" :offset="0">
+                        <el-card :body-style="{ padding: '0px' }"
+                            style="margin-top:15px;height:400px;overflow:auto;position:relative">
+                            <el-image style="width: 100%;height:240px;" :src="o.poster_url" fit="cover"></el-image>
+                            <h4 style="padding:0 10px;margin:0">{{o.movie_title}}</h4>
+                            <el-rate v-model="o.score" :texts="['so bad', 'disappointed', 'normal', 'good', 'great']"
+                                style="padding:10px 10px;" :colors="colors" show-text></el-rate>
+                            <el-button type="danger" icon="el-icon-s-flag" @click="similar_liked(o)"
+                                style="position:absolute;bottom:10px;right:10px">Like</el-button>
+                        </el-card>
+                    </el-col>
+                </el-row>
+            </div>
+
+            <!-- Index1 & 2: Similar With Liked -->
+            <div v-show="similar_show">
+                <h2>Liked Similar</h2>
+                <el-row :gutter="20">
+                    <el-col :span="4" v-for="o in liked" :key="o.movie_id" :offset="0">
+                        <el-card :body-style="{ padding: '0px' }"
+                            style="margin-top:15px;height:400px;overflow:auto;position:relative">
+                            <el-image style="width: 100%;height:240px;" :src="o.poster_url" fit="cover"></el-image>
+                            <h4 style="padding:0 10px;margin:0">{{o.movie_title}}</h4>
+                            <!-- <el-rate v-model="o.score" :texts="['so bad', 'disappointed', 'normal', 'good', 'great']"
+                                style="padding:10px 10px;" :colors="colors" show-text></el-rate> -->
+                            <!-- <el-button type="danger" icon="el-icon-s-flag"
+                                style="position:absolute;bottom:10px;right:10px">Like</el-button> -->
+                        </el-card>
+                    </el-col>
+                </el-row>
+            </div>
+
+            <!-- Index3: Explaination and Feedback -->
+            <div v-show="activeIndex3">
+                <label>Explaination and Feedback</label>
+                <div style="margin: 0 auto;">
+                    <el-image style="width: 600px; height: 400px" :src="tagcloud" fit="fill"></el-image>
+                </div>
+            </div>
+        </el-main>
+    </el-container>
+</div>
+
+<body>
+    <!-- import Vue before Element -->
+    <script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
+    <!-- import JavaScript -->
+    <script src="https://unpkg.com/element-ui/lib/index.js"></script>
+    <script src="https://unpkg.com/element-ui/lib/umd/locale/en.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script>
+        ELEMENT.locale(ELEMENT.lang.en)
+        new Vue({
+            el: '#app',
+            data: function () {
+                return {
+                    baseurl: 'http://127.0.0.1:8887',
+                    genre: [],
+                    selected_genre: [],
+                    movies: [],
+                    CFR: [],
+                    CBR: [],
+                    liked: [],
+                    dialog0: true,
+                    dialog1: false,
+                    checkboxGroup1: [],
+                    loading: false,
+                    colors: ['#99A9BF', '#F7BA2A', '#FF9900'],
+                    user_id: 0,
+                    // Change Nav Menu
+                    activeIndex1: true,
+                    activeIndex2: false,
+                    activeIndex3: false,
+                    // CFR Evaluation Metric
+                    RMSE: 0,
+                    MSE: 0,
+                    MAE: 0,
+                    // CBR Evaluation Metric
+                    Precision: 0,
+                    Recall: 0,
+                    nDCG: 0,
+                    // TagCloud Image url
+                    tagcloud: ''
+                }
+            },
+            methods: {
+                // Jump Methods
+                index1: function () {
+                    this.activeIndex1 = true;
+                    this.activeIndex2 = false;
+                    this.activeIndex3 = false;
+                },
+                index3: function () {
+                    this.activeIndex1 = false;
+                    this.activeIndex2 = false;
+                    this.activeIndex3 = true;
+                    this.tagcloud = '';
+                    // Generate Tag Cloud Image
+                    axios.post(this.baseurl + "/api/tagcloud").then((res) => {
+                        console.log(res.data);
+                        this.tagcloud = 'tagcloud.jpg';
+                    });
+                },
+                // Dialog0 --> Dialog1 Methods
+                step1: function () {
+                    axios.post(this.baseurl + "/api/uid", { content: this.user_id }).then((res) => {
+                        console.log(res.data)
+                    });
+                    console.log(this.selected_genre);
+                    axios.post(this.baseurl + "/api/movies", this.selected_genre).then((res) => {
+                        this.movies = res.data;
+                        if (this.movies.length == 18) {
+                            this.dialog0 = false;
+                            this.dialog1 = true;
+                        } else {
+                            this.$message({
+                                showClose: true,
+                                message: 'Error'
+                            });
+                        }
+                    })
+                },
+                // Collaborative Filtering Recommendation：KNNWithMeans
+                cfr: function () {
+                    this.loading = true;
+                    this.dialog1 = false;
+                    console.log(this.user_id);
+                    console.log(this.movies);
+                    // add new rating movies record into new_u.data
+                    axios.post(this.baseurl + "/api/user_add", this.movies);
+                    // CFR Recommend
+                    axios.post(this.baseurl + "/api/cfr_recommend").then((res) => {
+                        console.log(res.data)
+                        this.CFR = res.data;
+                        if (this.CFR.length > 0) {
+                            this.loading = false;
+                        } else {
+                            this.$message({
+                                showClose: true,
+                                message: 'Error'
+                            });
+                        }
+                    })
+                },
+                // Second Recommendation (Click Refresh Button)
+                cfr2: function () {
+                    this.loading = true;
+                    console.log(this.user_id);
+                    // add new rating movies record into new_u.data
+                    axios.post(this.baseurl + "/api/user_add", this.CFR);
+                    // CFR Recommend
+                    axios.post(this.baseurl + "/api/cfr_recommend").then((res) => {
+                        console.log(res.data)
+                        this.CFR = res.data;
+                        if (this.CFR.length > 0) {
+                            this.loading = false;
+                        } else {
+                            this.$message({
+                                showClose: true,
+                                message: 'Error'
+                            });
+                        }
+                    })
+                },
+                // Evaluate CFR Recommendation Results
+                evaluate_cfr: function () {
+                    axios.post(this.baseurl + "/api/evaluate_cfr").then((res) => {
+                        console.log(res.data);
+                        this.RMSE = res.data[0];
+                        this.MSE = res.data[1];
+                        this.MAE = res.data[2];
+                    })
+                },
+                // Content-Based Recommendation：based movie's genre
+                cbr: function () {
+                    this.activeIndex1 = false;
+                    this.activeIndex3 = false;
+                    this.activeIndex2 = true;
+                    // If this.CBR have results, then don't recommend again
+                    if (this.CBR.length == 0) {
+                        // new to CBR, launch cbr_recommend
+                        this.loading = true;
+                        console.log(this.user_id);
+                        axios.post(this.baseurl + "/api/cbr_recommend").then((res) => {
+                            console.log(res.data);
+                            this.CBR = res.data;
+                            this.loading = false;
+                            if (this.CBR.length <= 0) {
+                                this.$message({
+                                    showClose: true,
+                                    message: 'Error'
+                                });
+                            }
+                        })
+                    } else {
+                        // do nothing, just present page
+                    }
+                },
+                // Second Recommendation (Click Refresh Button)
+                cbr2: function () {
+                    this.loading = true;
+                    console.log(this.user_id);
+                    axios.post(this.baseurl + "/api/user_add", this.CBR);
+                    // CBR Recommend
+                    axios.post(this.baseurl + "/api/cbr_recommend").then((res) => {
+                        console.log(res.data);
+                        this.CBR = res.data;
+                        this.loading = false;
+                        if (this.CBR.length <= 0) {
+                            this.$message({
+                                showClose: true,
+                                message: 'Error'
+                            });
+                        }
+                    })
+                },
+                // Evaluate CBR Recommendation Results
+                evaluate_cbr: function () {
+                    axios.post(this.baseurl + "/api/evaluate_cbr").then((res) => {
+                        console.log(res.data);
+                        this.Precision = res.data[0];
+                        this.Recall = res.data[1];
+                        this.nDCG = res.data[2];
+                    })
+                },
+                // Similar With Liked
+                similar_liked: function (movie) {
+                    console.log(movie.movie_id)
+                    let that = this;
+                    this.liked.push(movie);
+                    // pop the movie from CFR and CBR
+                    this.CFR.splice(this.CFR.findIndex(item => item.movie_id === movie.movie_id), 1);
+                    this.CBR.splice(this.CBR.findIndex(item => item.movie_id === movie.movie_id), 1);
+                    axios.get(this.baseurl + "/api/similar_liked/" + movie.movie_id).then((res) => {
+                        console.log(res.data);
+                        // put first two movies in CFR
+                        // put last four movies in liked
+                        that.CFR.push.apply(that.CFR, res.data.slice(0, 2));
+                        that.liked.push.apply(that.liked, res.data.slice(2, 6));
+                    })
+                }
+            },
+            mounted: function () {
+                // acquire movies' genre for Dialog0
+                axios.get(this.baseurl + "/api/genre").then((res) => {
+                    this.genre = res.data['genre'];
+                })
+            },
+            computed: {
+                step1_show: function () {
+                    if (this.selected_genre.length > 0) {
+                        return false;
+                    } else {
+                        return true;
+                    }
+                },
+                step2_show: function () {
+                    let scores = 0;
+                    // Determine whether all 18 movies have ratings, and some scores+1
+                    for (let i of this.movies) {
+                        if (i['score'] > 0) {
+                            scores++
+                        }
+                    }
+                    // If all 18 movies are rated, do not disable button, otherwise disable button
+                    if (scores >= 18) {
+                        return false;
+                    } else {
+                        return true
+                    }
+                },
+                // If not Index3, then show similar with liked
+                similar_show: function () {
+                    if (this.activeIndex3 == true)
+                        return false
+                    else
+                        return true
+                }
+            }
+        })
+    </script>
+</body>
+</html>
