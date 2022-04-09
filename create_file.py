@@ -29,4 +29,4 @@ movies = movies.fillna(no_image_url)
 movies.drop(['Unnamed: 0'], axis=1)
 
 # output movies.xlsx
-movies.to_excel("movies.xlsx", index_col=0)
+movies.to_excel("movies.xlsx")
