@@ -222,7 +222,7 @@ def get_cfr(user_id, n):
         # name: pearson or cosine similarity
         'name': 'cosine', 
         # Compute similarities between items or users
-        'user_based': True
+        'user_based': False
     })
     # fit training data
     algo.fit(trainset)

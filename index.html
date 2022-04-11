@@ -34,7 +34,7 @@
     </el-menu>
 
     <el-container>
-        <el-main v-loading="loading" element-loading-text="Recommending... About three minutes">
+        <el-main v-loading="loading" element-loading-text="Recommending... About two minutes">
 
             <!-- Dialog0: Select Your Like Genres -->
             <el-dialog title="Please choose any genre you're interested in." :visible="dialog0" width="60%"
@@ -175,11 +175,24 @@
             </div>
 
             <!-- Index3: Explaination and Feedback -->
-            <div v-show="activeIndex3">
-                <label>Explaination and Feedback</label>
-                <div style="margin: 0 auto;">
-                    <el-image style="width: 600px; height: 400px" :src="tagcloud" fit="fill"></el-image>
+            <div v-show="activeIndex3" style="margin-top: 30px;">
+                <div style="float: left;" v-loading="loading2" element-loading-text="Loading TagCloud...">
+                    <label><b>Explaination (Genre of movies you rated over 3)</b></label><br>
+                    <el-image id="image" style="width: 550px; height: 400px" :src="tagcloud" fit="cover"></el-image>
                 </div>
+
+                <!-- User Feedback -->
+                <el-card class="box-card" style="width: 650px; float: right;" shadow="hover">
+                    <div slot="header" class="clearfix">
+                      <span><b>Which other genres do you prefer?</b></span>
+                      <el-button style="float: right; padding: 3px 0" @click="feedback" 
+                        type="primary" size="medium">Submit</el-button>
+                    </div>
+                    <el-checkbox-group v-model="feedback_genre" style="margin-top:10px">
+                        <el-checkbox :label=item border v-for="(item, index) in genre" :key="index"
+                            style="margin-top:20px; margin-left: 0px"></el-checkbox>
+                    </el-checkbox-group>
+                  </el-card>
             </div>
         </el-main>
     </el-container>
@@ -205,7 +218,8 @@
                     CFR: [],
                     CBR: [],
                     liked: [],
-                    dialog0: true,
+                    // set dialog0 false, convenient to debug
+                    dialog0: false,
                     dialog1: false,
                     checkboxGroup1: [],
                     loading: false,
@@ -224,7 +238,11 @@
                     Recall: 0,
                     nDCG: 0,
                     // TagCloud Image url
-                    tagcloud: ''
+                    tagcloud: '',
+                    // User Feedback Genres
+                    feedback_genre: [],
+                    // judge tagcloud laoding
+                    loading2: false
                 }
             },
             methods: {
@@ -238,11 +256,14 @@
                     this.activeIndex1 = false;
                     this.activeIndex2 = false;
                     this.activeIndex3 = true;
+                    this.loading2 = true;
                     this.tagcloud = '';
                     // Generate Tag Cloud Image
                     axios.post(this.baseurl + "/api/tagcloud").then((res) => {
                         console.log(res.data);
+                        // Refresh TagCloud
                         this.tagcloud = 'tagcloud.jpg';
+                        this.loading2 = false;
                     });
                 },
                 // Dialog0 --> Dialog1 Methods
@@ -266,25 +287,30 @@
                 },
                 // Collaborative Filtering Recommendation：KNNWithMeans
                 cfr: function () {
-                    this.loading = true;
-                    this.dialog1 = false;
-                    console.log(this.user_id);
                     console.log(this.movies);
                     // add new rating movies record into new_u.data
                     axios.post(this.baseurl + "/api/user_add", this.movies);
-                    // CFR Recommend
-                    axios.post(this.baseurl + "/api/cfr_recommend").then((res) => {
-                        console.log(res.data)
-                        this.CFR = res.data;
-                        if (this.CFR.length > 0) {
-                            this.loading = false;
-                        } else {
-                            this.$message({
-                                showClose: true,
-                                message: 'Error'
-                            });
-                        }
-                    })
+                    if (this.feedback_genre.length != 0) {
+                        // if it's from feedback, then close dialog1, do nothing
+                        this.dialog1 = false;
+                    } else {
+                        this.loading = true;
+                        this.dialog1 = false;
+                        console.log(this.user_id);
+                        // CFR Recommend
+                        axios.post(this.baseurl + "/api/cfr_recommend").then((res) => {
+                            console.log(res.data)
+                            this.CFR = res.data;
+                            if (this.CFR.length > 0) {
+                                this.loading = false;
+                            } else {
+                                this.$message({
+                                    showClose: true,
+                                    message: 'Error'
+                                });
+                            }
+                        })
+                    }
                 },
                 // Second Recommendation (Click Refresh Button)
                 cfr2: function () {
@@ -381,6 +407,22 @@
                         // put last four movies in liked
                         that.CFR.push.apply(that.CFR, res.data.slice(0, 2));
                         that.liked.push.apply(that.liked, res.data.slice(2, 6));
+                    })
+                },
+                // Realize User Feedback
+                feedback: function () {
+                    console.log(this.feedback_genre);
+                    axios.post(this.baseurl + "/api/movies", this.feedback_genre).then((res) => {
+                        this.movies = res.data;
+                        if (this.movies.length == 18) {
+                            this.dialog0 = false;
+                            this.dialog1 = true;
+                        } else {
+                            this.$message({
+                                showClose: true,
+                                message: 'Error'
+                            });
+                        }
                     })
                 }
             },
